@@ -5,18 +5,43 @@ const results = document.querySelector("#results");
 const info = document.querySelector("#info");
 const install = document.querySelector("#install");
 const posNames = {n:["n.","名词"],v:["v.","动词"],adj:["adj.","形容词"],adv:["adv.","副词"],prep:["prep.","介词"],conj:["conj.","连词"],pron:["pron.","代词"],int:["interj.","感叹词"],det:["det.","限定词"],art:["art.","冠词"],num:["num.","数词"],aux:["aux.","助动词"],modal:["modal","情态动词"],abbr:["abbr.","缩写"],pref:["prefix","前缀"],suff:["suffix","后缀"],other:["","释义"]};
-const lexicon = globalThis.lexicon ?? {};
+let lexicon = globalThis.lexicon ?? {};
 const featured = globalThis.featured;
-const words = [...new Set([...Object.keys(featured), ...Object.keys(lexicon), ...familyByWord.keys()])];
-const byLength = new Map();
-for (const word of words) {
-  if (!byLength.has(word.length)) byLength.set(word.length, []);
-  byLength.get(word.length).push(word);
-}
+const quickHeadwords = new Set(globalThis.quickHeadwords ?? []);
+let byLength;
+let completeLexicon;
+let lexiconReady = false;
+let lookupSequence = 0;
 const normalize = value => value.normalize("NFKC").trim().toLowerCase().replace(/[‘’]/g,"'").replace(/\s+/g," ");
 const hasWord = word => Object.hasOwn(featured, word) || Object.hasOwn(lexicon, word) || familyByWord.has(word);
 const knownTypos = {recieve:"receive",teh:"the",hte:"the",wierd:"weird",enviroment:"environment",definately:"definitely",accomodate:"accommodate",seperate:"separate",becuase:"because",beutiful:"beautiful",neccessary:"necessary",aple:"apple",helo:"hello",ligh:"light",helllo:"hello",serendipty:"serendipity",goverment:"government",grammer:"grammar",pronounciation:"pronunciation"};
 const simpleForms = word => [word+"s",word+"es",word+"ed",word+"ing",word+"d",word+"n",word+"ning",word+"ted",word.replace(/e$/,"")+"ing",word.replace(/y$/,"ies"),word.replace(/y$/,"ied")];
+
+function loadFullLexicon() {
+  if (!completeLexicon) {
+    completeLexicon = new Promise((resolve,reject)=>{
+      const script = document.createElement("script");
+      script.src = "lexicon.js";
+      const failed = ()=>{
+        script.remove();
+        completeLexicon = null;
+        reject(new Error("Failed to load the full dictionary"));
+      };
+      script.onload = ()=>{
+        if (!globalThis.lexicon || globalThis.lexicon===lexicon) {
+          failed();
+          return;
+        }
+        lexicon = globalThis.lexicon;
+        lexiconReady = true;
+        resolve();
+      };
+      script.onerror = failed;
+      document.head.append(script);
+    });
+  }
+  return completeLexicon;
+}
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -44,6 +69,14 @@ function suggestions(word) {
   if (word.length > 32) return [];
   const limit = word.length <= 4 ? 1 : word.length <= 8 ? 2 : 3;
   const typo = Object.hasOwn(knownTypos, word) ? knownTypos[word] : "";
+  if (!byLength) {
+    byLength = new Map();
+    const words = new Set([...Object.keys(featured), ...Object.keys(lexicon), ...familyByWord.keys()]);
+    for (const value of words) {
+      if (!byLength.has(value.length)) byLength.set(value.length, []);
+      byLength.get(value.length).push(value);
+    }
+  }
   const candidates = [];
   for (let len=Math.max(1,word.length-limit); len<=word.length+limit; len++) {
     for (const item of byLength.get(len) ?? []) {
@@ -261,7 +294,8 @@ function renderChinese(value) {
   results.append(card);
 }
 
-function lookup(value, updateQuery=false) {
+async function lookup(value, updateQuery=false) {
+  const sequence = ++lookupSequence;
   const trimmed = value.trim();
   const word = normalize(trimmed);
   if (updateQuery) query.value = trimmed;
@@ -271,12 +305,32 @@ function lookup(value, updateQuery=false) {
     query.focus();
     return;
   }
-  if (hanPattern.test(word)) {
-    renderChinese(word);
+  const chinese = hanPattern.test(word);
+  if (!chinese && !/^[a-z][a-z .'-]*$/.test(word)) {
+    notice("请输入英文或中文词语","例如 light、谢谢或开心。");
     return;
   }
-  if (!/^[a-z][a-z .'-]*$/.test(word)) {
-    notice("请输入英文或中文词语","例如 light、谢谢或开心。");
+  const canUseCore = chinese ? Object.hasOwn(chinesePhrases,chineseKey(word)) : quickHeadwords.has(word) && hasWord(word);
+  if (!canUseCore && !lexiconReady) {
+    notice("正在加载完整词库","常用词可以先查。完整词库首次下载可能需要一点时间。");
+    try {
+      await loadFullLexicon();
+    } catch {
+      if (sequence===lookupSequence) {
+        results.replaceChildren();
+        const retry = element("button","chip","重试");
+        retry.type = "button";
+        retry.addEventListener("click",()=>lookup(value,updateQuery));
+        notice("完整词库暂时加载失败","可以重试，或先查询 light、谢谢等常用词。");
+        results.querySelector(".notice").append(retry);
+      }
+      return;
+    }
+    if (sequence!==lookupSequence) return;
+    results.replaceChildren();
+  }
+  if (chinese) {
+    renderChinese(word);
     return;
   }
   if (hasWord(word)) {
@@ -316,7 +370,7 @@ function sourceLink(label,href) {
 
 document.querySelector("#sources").addEventListener("click",()=>{
   const dictionary = element("p");
-  dictionary.append("词性、音标与中文释义参考 ",sourceLink("ECDICT","https://github.com/skywind3000/ECDICT"),"（",sourceLink("MIT 许可","ECDICT-LICENSE.txt"),"），收录 "+words.length.toLocaleString("zh-CN")+" 个词条。");
+  dictionary.append("词性、音标与中文释义参考 ",sourceLink("ECDICT","https://github.com/skywind3000/ECDICT"),"（",sourceLink("MIT 许可","ECDICT-LICENSE.txt"),"），收录 "+globalThis.wordlightFullCount.toLocaleString("zh-CN")+" 个词条。");
   const sentences = element("p");
   sentences.append("部分双语例句由词灯编写，其余选自 ",sourceLink("Tatoeba","https://tatoeba.org/"),"（",sourceLink("CC BY 2.0 FR","https://creativecommons.org/licenses/by/2.0/fr/"),"）。语料由 ",sourceLink("ManyThings","https://www.manythings.org/anki/")," 整理，作者见例句下方。");
   const derivatives = element("p");

@@ -125,7 +125,8 @@ function getWordFamily(word, dictionary) {
     const [pos,meaning] = parts[0];
     if (["n","v","adj","adv"].includes(pos)) rows.push([word,pos,meaning,...source[3][0]]);
   }
-  for (const [term, pos] of globalThis.wordFamilyLinks?.[word] ?? []) {
+  const links = globalThis.wordFamilyLinks ?? {};
+  for (const [term, pos] of Object.hasOwn(links,word) ? links[word] : []) {
     const entry = dictionary[term];
     const meaning = entry?.[1].find(item=>item[0]===pos)?.[1];
     const example = entry?.[3]?.[0];

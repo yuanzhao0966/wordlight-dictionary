@@ -1,7 +1,9 @@
 "use strict";
-const cacheName = "wordlight-3";
-const assets = ["./","./index.html","./style.css","./featured.js","./lexicon.js","./chinese.js","./word-family-links.js","./word-families.js","./word-pictures.jpg","./WORDNET-LICENSE.txt","./app.js","./app.webmanifest","./icon-192.png","./icon-512.png","./ECDICT-LICENSE.txt"];
+const cacheName = "wordlight-4";
+const assets = ["./","./index.html","./style.css","./featured.js","./lexicon-core.js","./chinese.js","./word-family-links.js","./word-families.js?v=4","./word-pictures.jpg","./WORDNET-LICENSE.txt","./app.js?v=4","./app.webmanifest","./icon-192.png","./icon-512.png","./ECDICT-LICENSE.txt"];
 const allowed = new Set(assets.map(asset=>new URL(asset,self.location.href).href));
+const fullDictionary = new URL("./lexicon.js",self.location.href).href;
+allowed.add(fullDictionary);
 self.addEventListener("install",event=>{
   event.waitUntil(caches.open(cacheName).then(cache=>cache.addAll(assets)).then(()=>self.skipWaiting()));
 });
@@ -12,6 +14,11 @@ self.addEventListener("fetch",event=>{
   if (event.request.method!=="GET" || !allowed.has(event.request.url)) return;
   event.respondWith(caches.open(cacheName).then(async cache=>{
     const fallback = await cache.match(event.request);
-    return fallback ?? fetch(event.request);
+    if (fallback) return fallback;
+    const response = await fetch(event.request);
+    if (event.request.url === fullDictionary && response.ok) {
+      cache.put(event.request,response.clone()).catch(()=>{});
+    }
+    return response;
   }));
 });
