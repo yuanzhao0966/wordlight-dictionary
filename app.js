@@ -7,14 +7,14 @@ const install = document.querySelector("#install");
 const posNames = {n:["n.","名词"],v:["v.","动词"],adj:["adj.","形容词"],adv:["adv.","副词"],prep:["prep.","介词"],conj:["conj.","连词"],pron:["pron.","代词"],int:["interj.","感叹词"],det:["det.","限定词"],art:["art.","冠词"],num:["num.","数词"],aux:["aux.","助动词"],modal:["modal","情态动词"],abbr:["abbr.","缩写"],pref:["prefix","前缀"],suff:["suffix","后缀"],other:["","释义"]};
 const lexicon = globalThis.lexicon ?? {};
 const featured = globalThis.featured;
-const words = [...new Set([...Object.keys(featured), ...Object.keys(lexicon)])];
+const words = [...new Set([...Object.keys(featured), ...Object.keys(lexicon), ...familyByWord.keys()])];
 const byLength = new Map();
 for (const word of words) {
   if (!byLength.has(word.length)) byLength.set(word.length, []);
   byLength.get(word.length).push(word);
 }
 const normalize = value => value.normalize("NFKC").trim().toLowerCase().replace(/[‘’]/g,"'").replace(/\s+/g," ");
-const hasWord = word => Object.hasOwn(featured, word) || Object.hasOwn(lexicon, word);
+const hasWord = word => Object.hasOwn(featured, word) || Object.hasOwn(lexicon, word) || familyByWord.has(word);
 const knownTypos = {recieve:"receive",teh:"the",hte:"the",wierd:"weird",enviroment:"environment",definately:"definitely",accomodate:"accommodate",seperate:"separate",becuase:"because",beutiful:"beautiful",neccessary:"necessary",aple:"apple",helo:"hello",ligh:"light",helllo:"hello",serendipty:"serendipity",goverment:"government",grammer:"grammar",pronounciation:"pronunciation"};
 const simpleForms = word => [word+"s",word+"es",word+"ed",word+"ing",word+"d",word+"n",word+"ning",word+"ted",word.replace(/e$/,"")+"ing",word.replace(/y$/,"ies"),word.replace(/y$/,"ied")];
 
@@ -101,6 +101,9 @@ function renderEntry(word) {
   for (const sense of imported?.[1] ?? []) {
     if (!preferred.has(sense[0]) && !(sense[0]==="other" && senses.length)) senses.push(sense);
   }
+  if (!senses.length) {
+    for (const [term,...sense] of getWordFamily(word,lexicon)) if (term===word) senses.push(sense);
+  }
   const card = element("article","entry");
   const head = element("div","entry-head");
   const label = element("div");
@@ -116,7 +119,17 @@ function renderEntry(word) {
   audio.append(document.querySelector("#audio-icon").content.cloneNode(true));
   audio.disabled = !("speechSynthesis" in window);
   audio.addEventListener("click",()=>speak(word));
-  head.append(label,audio);
+  const tools = element("div","entry-tools");
+  const visual = wordVisuals.get(word);
+  if (visual) {
+    const [position,alt] = visual;
+    const illustration = element("div","word-visual "+position);
+    illustration.setAttribute("role","img");
+    illustration.setAttribute("aria-label",alt);
+    tools.append(illustration);
+  }
+  tools.append(audio);
+  head.append(label,tools);
   card.append(head);
   for (const [kind,meaning,en,zh] of senses) {
     const sense = element("section","sense");
@@ -135,7 +148,55 @@ function renderEntry(word) {
     for (const [en,zh,credit] of imported?.[3] ?? []) section.append(example(en,zh,word,credit));
     card.append(section);
   }
+  card.append(renderWordFamily(word));
   results.append(card);
+}
+
+function renderWordFamily(word) {
+  const rows = getWordFamily(word,lexicon);
+  const section = element("section","sense family");
+  section.append(element("h3","family-title","衍生词"));
+  const filters = element("div","family-filters");
+  filters.setAttribute("role","group");
+  filters.setAttribute("aria-label","选择衍生词词性");
+  const list = element("div","family-list");
+  list.setAttribute("aria-live","polite");
+  const choices = [["all","全部"],["n","名词"],["v","动词"],["adj","形容词"],["adv","副词"]];
+  const buttons = [];
+  for (const [pos,label] of choices) {
+    const button = element("button","chip",label);
+    button.type = "button";
+    button.addEventListener("click",()=>show(pos));
+    buttons.push(button);
+    filters.append(button);
+  }
+  function show(kind) {
+    for (let i=0;i<buttons.length;i++) buttons[i].setAttribute("aria-pressed",String(choices[i][0]===kind));
+    list.replaceChildren();
+    const matches = rows.filter(([term,pos])=>kind==="all" ? term!==word : pos===kind);
+    if (!matches.length) {
+      const name = choices.find(([pos])=>pos===kind)[1];
+      list.append(element("p","family-empty",kind==="all" ? "暂未收录这个词的衍生词和例句。" : "暂未收录对应的"+name+"形式和例句。"));
+      return;
+    }
+    for (const [term,pos,meaning,en,zh,credit] of matches) {
+      const row = element("div","family-row");
+      const title = element("h4","sense-title expression");
+      const link = element(term===word?"span":"button",term===word?"":"word-link",term);
+      link.lang = "en";
+      if (term!==word) {
+        link.type = "button";
+        link.addEventListener("click",()=>lookup(term,true));
+      }
+      title.append(link,element("span","pos",posNames[pos][0]));
+      if (term===word) title.append(element("span","similar-gloss","原词拼写"));
+      row.append(title,element("p","meaning",meaning),example(en,zh,term,credit));
+      list.append(row);
+    }
+  }
+  section.append(filters,list);
+  show("all");
+  return section;
 }
 
 function notice(title, message, candidates=[]) {
@@ -258,7 +319,9 @@ document.querySelector("#sources").addEventListener("click",()=>{
   dictionary.append("词性、音标与中文释义参考 ",sourceLink("ECDICT","https://github.com/skywind3000/ECDICT"),"（",sourceLink("MIT 许可","ECDICT-LICENSE.txt"),"），收录 "+words.length.toLocaleString("zh-CN")+" 个词条。");
   const sentences = element("p");
   sentences.append("部分双语例句由词灯编写，其余选自 ",sourceLink("Tatoeba","https://tatoeba.org/"),"（",sourceLink("CC BY 2.0 FR","https://creativecommons.org/licenses/by/2.0/fr/"),"）。语料由 ",sourceLink("ManyThings","https://www.manythings.org/anki/")," 整理，作者见例句下方。");
-  dialog("词库来源",dictionary,sentences);
+  const derivatives = element("p");
+  derivatives.append("衍生词由词灯整理，并参考 ",sourceLink("Princeton WordNet","https://wordnet.princeton.edu/"),"（",sourceLink("WordNet 许可","WORDNET-LICENSE.txt"),"）。");
+  dialog("词库来源",dictionary,sentences,derivatives);
 });
 
 let installPrompt;

@@ -1,6 +1,6 @@
 "use strict";
-const cacheName = "wordlight-2";
-const assets = ["./","./index.html","./style.css","./featured.js","./lexicon.js","./chinese.js","./app.js","./app.webmanifest","./icon-192.png","./icon-512.png","./ECDICT-LICENSE.txt"];
+const cacheName = "wordlight-3";
+const assets = ["./","./index.html","./style.css","./featured.js","./lexicon.js","./chinese.js","./word-family-links.js","./word-families.js","./word-pictures.jpg","./WORDNET-LICENSE.txt","./app.js","./app.webmanifest","./icon-192.png","./icon-512.png","./ECDICT-LICENSE.txt"];
 const allowed = new Set(assets.map(asset=>new URL(asset,self.location.href).href));
 self.addEventListener("install",event=>{
   event.waitUntil(caches.open(cacheName).then(cache=>cache.addAll(assets)).then(()=>self.skipWaiting()));

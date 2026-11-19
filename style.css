@@ -45,6 +45,19 @@ h1 span{color:var(--blue);margin-left:3px}
 .word-link{border:0;padding:0;background:none;color:var(--blue);font:inherit;text-align:left;text-decoration:underline;text-underline-offset:3px}
 .word-link:hover{color:#233ebc}
 .similar-gloss{color:var(--muted);font-size:13px;font-weight:400}
+.entry-tools{display:flex;align-items:center;gap:12px;flex:none}
+.word-visual{width:86px;aspect-ratio:1;border:1px solid var(--line);border-radius:12px;background-image:url("word-pictures.jpg");background-size:200% 200%;background-repeat:no-repeat}
+.visual-light{background-position:left top}
+.visual-run{background-position:right top}
+.visual-book{background-position:left bottom}
+.visual-butterfly{background-position:right bottom}
+.family-title{font-size:22px;margin:0 0 11px}
+.family-filters{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:15px}
+.family-filters button[aria-pressed=true]{background:var(--blue);color:white;border-color:var(--blue)}
+.family-row{border-top:1px solid var(--line);padding:15px 0}
+.family-row:last-child{padding-bottom:0}
+.family-empty{color:var(--muted);margin:0;line-height:1.65}
+@media(max-width:430px){.entry-tools{gap:7px}.word-visual{width:59px}}
 .pos{display:inline-block;background:#eaf0ff;color:#2543bd;padding:3px 8px;border-radius:5px;font-weight:700;font-size:13px;white-space:nowrap}
 .meaning{margin:0;line-height:1.65;white-space:pre-line}
 .example{margin:13px 0 0;border-left:2px solid #ccd8ff;padding-left:13px}
